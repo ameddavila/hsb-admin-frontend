@@ -1,5 +1,13 @@
-// utils/cookie.ts
-export const getCookie = (name: string): string | null => {
-  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return match ? decodeURIComponent(match[2]) : null;
-};
+export function getCookie(name: string): string | null {
+  const cookieString = document.cookie;
+  const cookies = cookieString.split(";");
+
+  for (const cookie of cookies) {
+    const [key, value] = cookie.trim().split("=");
+    if (key === name) {
+      return decodeURIComponent(value);
+    }
+  }
+
+  return null;
+}

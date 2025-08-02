@@ -46,9 +46,7 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      setMenus: (menus) => {
-        set({ menus });
-      },
+      setMenus: (menus) => set({ menus }),
 
       clearUser: () => {
         localStorage.removeItem("csrfToken");
@@ -72,17 +70,15 @@ export const useAuthStore = create<AuthState>()(
         try {
           console.log("📤 Iniciando login:", identifier);
 
-          // ✅ Obtener token CSRF desde backend
-          const { data } = await authApi.get<{ csrfToken: string }>("/auth/csrf");
+          // Obtener token CSRF del backend
+          const { data } = await authApi.get<{ csrfToken: string }>("/csrf");
           get().setCsrfToken(data.csrfToken);
 
           const res = await authApi.post<AuthResponse>(
-            "/auth/login",
+            "/login",
             { identifier, password },
             {
-              headers: {
-                "X-CSRF-Token": data.csrfToken,
-              },
+              headers: { "x-csrf-token": data.csrfToken },
               withCredentials: true,
             }
           );
@@ -100,9 +96,7 @@ export const useAuthStore = create<AuthState>()(
             menus: [],
           });
 
-          if (csrfToken) {
-            localStorage.setItem("csrfToken", csrfToken);
-          }
+          if (csrfToken) localStorage.setItem("csrfToken", csrfToken);
 
           console.log("✅ Login exitoso:", user);
           return true;
@@ -114,17 +108,14 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          console.log("🔐 Obteniendo nuevo CSRF para logout...");
-          const { data } = await authApi.get<{ csrfToken: string }>("/auth/csrf");
+          const { data } = await authApi.get<{ csrfToken: string }>("/csrf");
           get().setCsrfToken(data.csrfToken);
 
           await authApi.post(
-            "/auth/logout",
+            "/logout",
             {},
             {
-              headers: {
-                "X-CSRF-Token": data.csrfToken,
-              },
+              headers: { "x-csrf-token": data.csrfToken },
               withCredentials: true,
             }
           );
@@ -156,11 +147,9 @@ export const useAuthStore = create<AuthState>()(
       fetchSession: async () => {
         try {
           const csrfToken = get().csrfToken;
-          const res = await authApi.get<AuthResponse>("/auth/me", {
-            headers: {
-              "x-csrf-token": csrfToken ?? "",
-            },
-            withCredentials: true, // ⚠️ Necesario para que la cookie se envíe
+          const res = await authApi.get<AuthResponse>("/me", {
+            headers: { "x-csrf-token": csrfToken ?? "" },
+            withCredentials: true,
           });
 
           const { user } = res.data;
@@ -175,10 +164,9 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           console.warn("⚠️ Sesión inválida:", error);
-          await get().logout(); // También debería hacer clearUser() si es necesario
+          await get().logout();
         }
       },
-
     }),
     {
       name: "auth-storage",

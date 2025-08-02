@@ -1,24 +1,35 @@
-// src/utils/waitForCookie.ts
-import Cookies from "js-cookie";
+// src/utils/waitForRotatedCsrf.ts
+import { getCookie } from "./cookie";
 import { useAuthStore } from "@/store/authStore";
 
-// Esta utilidad sincroniza el token CSRF que está en la cookie (_csrf)
-// y lo guarda en Zustand si es nuevo. Úsalo justo antes de hacer un POST/PUT/DELETE.
-export const waitForRotatedCsrf = async (): Promise<string | null> => {
-  const cookieToken = Cookies.get("_csrf");
+/**
+ * Espera hasta que la cookie csrfToken o _csrf sea visible (usualmente después de /auth/refresh)
+ * Fallback: 3 segundos de espera máxima.
+ */
+export const waitForRotatedCsrf = async (): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const maxRetries = 50;
+    let tries = 0;
 
-  if (cookieToken) {
-    console.log("🍪 Token CSRF desde cookie:", cookieToken);
+    const interval = setInterval(() => {
+      const rotatedToken = getCookie("csrfToken") || getCookie("_csrf");
 
-    const currentToken = useAuthStore.getState().csrfToken;
-    if (cookieToken !== currentToken) {
-      console.log("🔁 Token CSRF actualizado desde cookie");
-      useAuthStore.getState().setCsrfToken(cookieToken);
-    }
+      if (rotatedToken) {
+        const { csrfToken, setCsrfToken } = useAuthStore.getState();
 
-    return cookieToken;
-  }
+        if (csrfToken !== rotatedToken) {
+          setCsrfToken(rotatedToken);
+        }
 
-  console.warn("⚠️ No se encontró la cookie _csrf");
-  return null;
+        clearInterval(interval);
+        resolve(rotatedToken);
+      }
+
+      tries++;
+      if (tries >= maxRetries) {
+        clearInterval(interval);
+        reject(new Error("Timeout esperando token CSRF"));
+      }
+    }, 100);
+  });
 };

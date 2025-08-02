@@ -30,7 +30,7 @@ export const useCsrf = () => {
       // 🌐 Si no hay token, solicita uno al backend
       try {
         console.log("🌐 Solicitando CSRF desde backend...");
-        const res = await authApi.get<{ csrfToken: string }>("/auth/csrf");
+        const res = await authApi.get<{ csrfToken: string }>("/csrf");
 
         const token = res.data.csrfToken;
 

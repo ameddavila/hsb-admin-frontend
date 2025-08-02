@@ -6,7 +6,7 @@ export const login = async (
   identifier: string,
   password: string
 ): Promise<AuthResponse> => {
-  const res = await authApi.post<AuthResponse>("/auth/login", {
+  const res = await authApi.post<AuthResponse>("/login", {
     identifier,
     password,
   });
