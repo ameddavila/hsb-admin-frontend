@@ -1,61 +1,122 @@
-// src/services/userService.ts
-
 import userApi from "./userApi";
-import { User } from "@/types/User";
+import type { User } from "@/types/User";
+import type { AxiosErrorResponse } from "@/types/AxiosError";
+import { waitForRotatedCsrf } from "@/utils/waitForCookie";
+import { useAuthStore } from "@/store/authStore";
 
 /**
- * ✅ Obtener todos los usuarios
- * Retorna directamente un arreglo de usuarios
- * Se espera que el backend responda con: User[]
+ * 🔍 Obtener todos los usuarios
  */
 export const getUsers = async (): Promise<User[]> => {
-  console.log("📡 Llamando a /users desde getUsers()");
+  console.log("📡 [userService] GET /users");
 
-  // Tipado explícito como arreglo de usuarios
   const res = await userApi.get<User[]>("/users");
 
-  console.log("📨 Respuesta:", res.data);
-  return res.data; // res.data ya es User[]
+  console.log("📦 Usuarios recibidos:", res.data.length);
+  return res.data;
 };
 
 /**
- * ✅ Obtener un usuario por ID
- * Se espera que el backend responda con: { user: User }
+ * 🔍 Obtener un usuario por ID
  */
 export const getUserById = async (id: string): Promise<User> => {
+  console.log(`📡 [userService] GET /users/${id}`);
+
   const res = await userApi.get<{ user: User }>(`/users/${id}`);
+
+  console.log("📦 Usuario recibido:", res.data.user.username);
   return res.data.user;
 };
 
 /**
- * ✅ Crear nuevo usuario (con imagen de perfil)
- * Enviar un FormData con los campos y la imagen
- * El backend debe responder con: { user: User }
+ * ✍️ Crear un nuevo usuario (formData)
  */
 export const createUser = async (formData: FormData): Promise<User> => {
-  const res = await userApi.post<{ user: User }>("/users", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return res.data.user;
+  console.log("📤 [userService] POST /users");
+
+  try {
+    const csrfToken = await waitForRotatedCsrf();
+    const { accessToken } = useAuthStore.getState();
+
+    const res = await userApi.post<{ user: User }>("/users", formData, {
+      headers: {
+        "x-csrf-token": csrfToken,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "multipart/form-data",
+      },
+      withCredentials: true,
+    });
+
+    console.log("✅ Usuario creado:", res.data.user.username);
+    return res.data.user;
+  } catch (error: unknown) {
+    const err = error as AxiosErrorResponse;
+    console.error("❌ [userService] Error al crear usuario:", err.response?.data || err.message);
+    throw error;
+  }
 };
 
 /**
- * ✅ Actualizar un usuario existente (con imagen de perfil)
- * El backend debe responder con: { user: User }
+ * ✏️ Actualizar un usuario (formData)
  */
-export const updateUser = async (id: string, formData: FormData): Promise<User> => {
-  const res = await userApi.put<{ user: User }>(`/users/${id}`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return res.data.user;
+export const updateUser = async (
+  id: string,
+  formData: FormData
+): Promise<User> => {
+  console.log(`📤 [userService] PUT /users/${id}`);
+
+  try {
+    const csrfToken = await waitForRotatedCsrf();
+    const { accessToken } = useAuthStore.getState();
+
+    const res = await userApi.put<{ user: User }>(`/users/${id}`, formData, {
+      headers: {
+        "x-csrf-token": csrfToken,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "multipart/form-data",
+      },
+      withCredentials: true,
+    });
+
+    console.log("✅ Usuario actualizado:", res.data.user.username);
+    return res.data.user;
+  } catch (error: unknown) {
+    const err = error as AxiosErrorResponse;
+    console.error("❌ [userService] Error al actualizar usuario:", err.response?.data || err.message);
+    throw error;
+  }
 };
 
-//activar/dasactivar usuario
-export const toggleUserActive = async (id: string, isActive: boolean): Promise<User> => {
-  const res = await userApi.patch<{ user: User }>(`/users/${id}/status`, { isActive });
-  return res.data.user;
+/**
+ * 🔄 Activar o desactivar usuario
+ */
+export const toggleUserActive = async (
+  id: string,
+  isActive: boolean
+): Promise<User> => {
+  console.log(`📤 [userService] PATCH /users/${id}/status`, { isActive });
+
+  try {
+    const csrfToken = await waitForRotatedCsrf();
+    const { accessToken } = useAuthStore.getState();
+
+    const res = await userApi.patch<{ user: User }>(
+      `/users/${id}/status`,
+      { isActive },
+      {
+        headers: {
+          "x-csrf-token": csrfToken,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        withCredentials: true,
+      }
+    );
+
+    console.log("✅ Usuario activado/desactivado:", res.data.user.username);
+    return res.data.user;
+  } catch (error: unknown) {
+    const err = error as AxiosErrorResponse;
+    console.error("❌ [userService] Error en toggleUserActive:", err.response?.data || err.message);
+    throw error;
+  }
 };

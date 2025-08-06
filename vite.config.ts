@@ -22,9 +22,8 @@ export default defineConfig({
       configureServer(server) {
         console.log("🚀 SPA fallback activo para desarrollo");
         const historyMiddleware = history({
-          // Evita sobrescribir recursos como /@vite/client
           htmlAcceptHeaders: ["text/html", "application/xhtml+xml"],
-          rewrites: [{ from: /\/[^.]*$/, to: "/index.html" }], // solo rutas sin punto
+          rewrites: [{ from: /\/[^.]*$/, to: "/index.html" }],
           disableDotRule: true,
         }) as NextHandleFunction;
 
@@ -40,6 +39,28 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    // proxy: {
+    //   "/auth": {
+    //     target: "http://localhost:4001",
+    //     changeOrigin: true,
+    //     secure: false,
+    //   },
+    //   "/api": {
+    //     target: "http://localhost:4002",
+    //     changeOrigin: true,
+    //     secure: false,
+    //   },
+    //   "/menu": {
+    //     target: "http://localhost:4003",
+    //     changeOrigin: true,
+    //     secure: false,
+    //   },
+    //   "/biometrico": {
+    //     target: "http://localhost:4004",
+    //     changeOrigin: true,
+    //     secure: false,
+    //   },
+    // },
   },
   build: {
     outDir: "dist",

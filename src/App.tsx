@@ -24,8 +24,10 @@ import Images from "./pages/UiElements/Images";
 import Videos from "./pages/UiElements/Videos";
 import LineChart from "./pages/Charts/LineChart";
 import BarChart from "./pages/Charts/BarChart";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export default function App() {
+   useAutoRefresh();
   //console.log("🚀 App cargada, renderizando <Routes>...");
 
   return (

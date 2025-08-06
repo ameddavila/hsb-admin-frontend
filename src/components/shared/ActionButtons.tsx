@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { PencilIcon, TrashIcon, ChartBarIcon } from "@heroicons/react/24/outline";
 import ToggleButton from "@/components/ToggleButton/ToggleButton";
 
 interface ActionButtonsProps {
@@ -20,40 +20,35 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
   onToggle,
   showToggle = true,
 }) => {
-  useEffect(() => {
-    console.log(`[ActionButtons] 🧩 Renderizando acciones para ID: ${id}`);
-    console.log("onEdit:", !!onEdit, "onDelete:", !!onDelete, "onReport:", !!onReport, "onToggle:", !!onToggle);
-  }, [id, onEdit, onDelete, onReport, onToggle]);
-
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap gap-2 items-center justify-center">
       {onEdit && (
         <button
           onClick={() => onEdit(id)}
-          className="text-blue-600 hover:underline text-sm"
-          title="Editar"
+          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
         >
-          Editar
+          <PencilIcon className="w-4 h-4" />
+          <span>Editar</span>
         </button>
       )}
 
       {onDelete && (
         <button
           onClick={() => onDelete(id)}
-          className="text-red-600 hover:underline text-sm"
-          title="Eliminar"
+          className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 text-sm"
         >
-          Eliminar
+          <TrashIcon className="w-4 h-4" />
+          <span>Eliminar</span>
         </button>
       )}
 
       {onReport && (
         <button
           onClick={() => onReport(id)}
-          className="text-gray-600 hover:underline text-sm"
-          title="Reportes"
+          className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-800 text-sm"
         >
-          Reportes
+          <ChartBarIcon className="w-4 h-4" />
+          <span>Reportes</span>
         </button>
       )}
 

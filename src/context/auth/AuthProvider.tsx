@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import AuthContext from "./AuthContext";
 import { useAuthStore } from "@/store/authStore";
 import { waitForRotatedCsrf } from "@/utils/waitForCookie";
+import { setNavigator } from "@/utils/navigate"; // ✅ NUEVA LÍNEA
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -34,6 +35,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // 🔐 Intentar restaurar sesión al cargar
   useEffect(() => {
+    setNavigator(navigate); // ✅ HABILITA NAVEGACIÓN GLOBAL
+  }, [navigate]);
+
+  useEffect(() => {
     const init = async () => {
       if (isPublicRoute()) {
         setLoading(false);
@@ -43,9 +48,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         await waitForRotatedCsrf();
         await fetchSession();
-        // console.log("✅ Sesión restaurada:", user);
       } catch {
-        // console.warn("⚠️ No autenticado, redirigiendo a /signin");
         clearUser();
         navigate("/signin");
       } finally {
@@ -55,14 +58,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     init();
   }, [isPublicRoute, fetchSession, clearUser, navigate]);
-
-  // 🧪 Debug Zustand (opcional solo dev)
-  // useEffect(() => {
-  //   const unsub = useAuthStore.subscribe((state) => {
-  //     console.log("🧠 Zustand actualizado:", state);
-  //   });
-  //   return () => unsub();
-  // }, []);
 
   // 🔐 Login handler
   const handleLogin = async (identifier: string, password: string) => {

@@ -6,19 +6,25 @@ import type { AuthResponse } from "@/types/Auth";
 import type { User } from "@/types/User";
 import type { MenuNode } from "@/types/Menu";
 import { useMenuStore } from "./menuStore";
+import { getOrCreateDeviceId } from "@/utils/deviceId";
+import { waitForRotatedCsrf } from "@/utils/waitForCookie";
 
 type AuthState = {
   isAuthenticated: boolean;
   user: User | null;
   csrfToken: string | null;
+  accessToken: string | null;
   roles: string[];
   permissions: string[];
   menus: MenuNode[];
 
   setUser: (user: User) => void;
+  setRoles: (roles: string[]) => void;
+  setPermissions: (permissions: string[]) => void;
   setMenus: (menus: MenuNode[]) => void;
   clearUser: () => void;
   setCsrfToken: (token: string) => void;
+  setAccessToken: (token: string) => void;
 
   login: (identifier: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -31,139 +37,159 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       user: null,
       csrfToken: null,
+      accessToken: null,
       roles: [],
       permissions: [],
       menus: [],
 
       setUser: (user) => {
+        console.log("✅ [setUser] Usuario asignado:", user.username);
         set({
           user,
           isAuthenticated: true,
-          roles: Array.isArray(user.roles)
-            ? user.roles.map((r) => (typeof r === "string" ? r : r.name))
-            : [],
-          permissions: user.permissions ?? [],
         });
       },
 
-      setMenus: (menus) => set({ menus }),
+      setRoles: (roles) => {
+        console.log("✅ [setRoles] Asignando roles:", roles);
+        set({ roles });
+      },
+
+      setPermissions: (permissions) => {
+        console.log("✅ [setPermissions] Asignando permisos:", permissions);
+        set({ permissions });
+      },
+
+      setMenus: (menus) => {
+        console.log("✅ [setMenus] Asignando menús:", menus);
+        set({ menus });
+      },
+
+      setCsrfToken: (token) => {
+        if (!token || token === get().csrfToken) return;
+        localStorage.setItem("csrfToken", token);
+        console.log("🔐 [setCsrfToken] Nuevo token:", token);
+        set({ csrfToken: token });
+      },
+
+      setAccessToken: (token) => {
+        if (!token || token === get().accessToken) return;
+        localStorage.setItem("accessToken", token);
+        console.log("🔐 [setAccessToken] Nuevo token:", token);
+        set({ accessToken: token });
+      },
 
       clearUser: () => {
+        console.log("🧹 [clearUser] Limpiando estado y localStorage");
         localStorage.removeItem("csrfToken");
+        localStorage.removeItem("accessToken");
+
         set({
           isAuthenticated: false,
           user: null,
           csrfToken: null,
+          accessToken: null,
           roles: [],
           permissions: [],
           menus: [],
         });
       },
 
-      setCsrfToken: (token) => {
-        if (!token || token === get().csrfToken) return;
-        localStorage.setItem("csrfToken", token);
-        set({ csrfToken: token });
-      },
-
       login: async (identifier, password) => {
         try {
-          console.log("📤 Iniciando login:", identifier);
-
-          // Obtener token CSRF del backend
-          const { data } = await authApi.get<{ csrfToken: string }>("/csrf");
-          get().setCsrfToken(data.csrfToken);
+          console.log("📤 [login] Iniciando con:", identifier);
 
           const res = await authApi.post<AuthResponse>(
             "/login",
-            { identifier, password },
             {
-              headers: { "x-csrf-token": data.csrfToken },
+              identifier,
+              password,
+              deviceId: getOrCreateDeviceId(),
+            },
+            {
               withCredentials: true,
             }
           );
 
-          const { user, csrfToken } = res.data;
+          const { csrfToken, accessToken } = res.data;
 
-          set({
-            isAuthenticated: true,
-            user,
-            csrfToken,
-            roles: Array.isArray(user.roles)
-              ? user.roles.map((r) => (typeof r === "string" ? r : r.name))
-              : [],
-            permissions: user.permissions ?? [],
-            menus: [],
-          });
+          get().setCsrfToken(csrfToken);
+          get().setAccessToken(accessToken);
 
-          if (csrfToken) localStorage.setItem("csrfToken", csrfToken);
+          await get().fetchSession();
 
-          console.log("✅ Login exitoso:", user);
+          console.log("✅ [login] Autenticación completada");
           return true;
         } catch (error) {
-          console.error("❌ Error en login:", error);
+          console.error("❌ [login] Error:", error);
           return false;
         }
       },
 
       logout: async () => {
         try {
-          const { data } = await authApi.get<{ csrfToken: string }>("/csrf");
-          get().setCsrfToken(data.csrfToken);
+          const csrfToken = get().csrfToken ?? localStorage.getItem("csrfToken") ?? "";
+          console.log("📤 [logout] Cerrando sesión...");
 
           await authApi.post(
             "/logout",
             {},
             {
-              headers: { "x-csrf-token": data.csrfToken },
+              headers: { "x-csrf-token": csrfToken },
               withCredentials: true,
             }
           );
 
-          console.log("✅ Logout exitoso");
+          console.log("✅ [logout] Éxito");
         } catch (err) {
-          console.error("❌ Error al cerrar sesión:", err);
+          console.error("❌ [logout] Fallo al cerrar sesión:", err);
         }
 
-        set({
-          isAuthenticated: false,
-          user: null,
-          csrfToken: null,
-          roles: [],
-          permissions: [],
-        });
-
-        localStorage.removeItem("csrfToken");
+        get().clearUser();
 
         try {
           const { clearMenus, setMenuLoaded } = useMenuStore.getState();
           clearMenus();
           setMenuLoaded(false);
         } catch (err) {
-          console.warn("⚠️ No se pudo limpiar menú:", err);
+          console.warn("⚠️ [logout] Error limpiando menús:", err);
         }
       },
 
       fetchSession: async () => {
         try {
-          const csrfToken = get().csrfToken;
+          let csrfToken = get().csrfToken ?? localStorage.getItem("csrfToken") ?? "";
+
+          try {
+            const rotated = await waitForRotatedCsrf();
+            csrfToken = rotated ?? csrfToken;
+          } catch (err) {
+            console.log("⚠️ [fetchSession] No se pudo rotar CSRF:", err);
+          }
+
+          const accessToken = get().accessToken ?? localStorage.getItem("accessToken") ?? "";
+
           const res = await authApi.get<AuthResponse>("/me", {
-            headers: { "x-csrf-token": csrfToken ?? "" },
+            headers: {
+              "x-csrf-token": csrfToken,
+              Authorization: `Bearer ${accessToken}`,
+            },
             withCredentials: true,
           });
 
-          const { user } = res.data;
+          const { user, roles, permissions, menus } = res.data;
 
-          set({
-            isAuthenticated: true,
-            user,
-            roles: Array.isArray(user.roles)
-              ? user.roles.map((r) => (typeof r === "string" ? r : r.name))
-              : [],
-            permissions: user.permissions ?? [],
-          });
+          console.log("👤 [fetchSession] Usuario:", user);
+          console.log("🔐 [fetchSession] Roles:", roles);
+          console.log("🔑 [fetchSession] Permisos:", permissions);
+          console.log("📋 [fetchSession] Menús:", menus);
+
+          get().setUser(user);
+          get().setRoles(roles || []);
+          get().setPermissions(permissions || []);
+          get().setMenus(menus || []);
         } catch (error) {
-          console.warn("⚠️ Sesión inválida:", error);
+          console.warn("⚠️ [fetchSession] Sesión inválida:", error);
           await get().logout();
         }
       },
@@ -181,9 +207,11 @@ export const useAuthStore = create<AuthState>()(
             }
           : null,
         csrfToken: state.csrfToken,
+        accessToken: state.accessToken,
         roles: state.roles,
         permissions: state.permissions,
       }),
     }
   )
 );
+  

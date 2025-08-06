@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getUsers, toggleUserActive } from "@/services/userService";
 import { User } from "@/types/User";
 import { Link } from "react-router-dom";
-import UsuariosTable from "@/components/UserProfile/UsuariosTable"; // ✅ importa tu tabla
+import UsuariosTable from "@/components/UserProfile/UsuariosTable";
 
 export default function UsuariosList() {
   const [usuarios, setUsuarios] = useState<User[]>([]);
@@ -27,12 +27,12 @@ export default function UsuariosList() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 sm:p-6 max-w-full overflow-x-auto">
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
         <h1 className="text-xl font-bold">Usuarios</h1>
         <Link
-          to="/usuarios/nuevo"
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+          to="/administracion/usuarios/nuevo"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap"
         >
           + Nuevo Usuario
         </Link>
@@ -44,11 +44,10 @@ export default function UsuariosList() {
         <UsuariosTable
           usuarios={usuarios}
           onToggle={handleToggle}
-          onEdit={(id) => console.log("Editar", id)}       // ejemplo funcional
-          onDelete={(id) => console.log("Eliminar", id)}   // ejemplo funcional
-          onReport={(id) => console.log("Reporte", id)}    // ejemplo funcional
+          onEdit={(id) => console.log("Editar", id)}
+          onDelete={(id) => console.log("Eliminar", id)}
+          onReport={(id) => console.log("Reporte", id)}
         />
-
       )}
     </div>
   );

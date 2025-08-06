@@ -1,40 +1,30 @@
-import ComponentCard from "../../common/ComponentCard";
+// src/components/form/form-elements/ToggleSwitch.tsx
 import Switch from "../switch/Switch";
 
-export default function ToggleSwitch() {
-  const handleSwitchChange = (checked: boolean) => {
-    console.log("Switch is now:", checked ? "ON" : "OFF");
-  };
+interface ToggleSwitchProps {
+  enabled: boolean;
+  setEnabled: (value: boolean) => void;
+  disabled?: boolean;
+  label?: string;
+  color?: "blue" | "gray";
+}
+
+export default function ToggleSwitch({
+  enabled,
+  setEnabled,
+  disabled = false,
+  label = "",
+  color = "blue",
+}: ToggleSwitchProps) {
   return (
-    <ComponentCard title="Toggle switch input">
-      <div className="flex gap-4">
-        <Switch
-          label="Default"
-          defaultChecked={true}
-          onChange={handleSwitchChange}
-        />
-        <Switch
-          label="Checked"
-          defaultChecked={true}
-          onChange={handleSwitchChange}
-        />
-        <Switch label="Disabled" disabled={true} />
-      </div>{" "}
-      <div className="flex gap-4">
-        <Switch
-          label="Default"
-          defaultChecked={true}
-          onChange={handleSwitchChange}
-          color="gray"
-        />
-        <Switch
-          label="Checked"
-          defaultChecked={true}
-          onChange={handleSwitchChange}
-          color="gray"
-        />
-        <Switch label="Disabled" disabled={true} color="gray" />
-      </div>
-    </ComponentCard>
+    <div className="flex items-center gap-3">
+      {label && <label className="text-sm">{label}</label>}
+      <Switch
+        checked={enabled}
+        onChange={setEnabled}
+        color={color}
+        disabled={disabled}
+      />
+    </div>
   );
 }

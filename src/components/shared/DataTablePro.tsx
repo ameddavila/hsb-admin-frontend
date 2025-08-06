@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-//import Badge from "@/components/ui/badge/Badge";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export interface Column<T> {
   key: Extract<keyof T, string> | "acciones";
@@ -18,6 +18,7 @@ interface DataTableProProps<T> {
   title?: string;
   data: T[];
   columns: Column<T>[];
+  cardRender?: (item: T) => React.ReactNode;
   searchKeys?: (keyof T)[];
   filterBy?: {
     label: string;
@@ -34,6 +35,7 @@ export default function DataTablePro<T>({
   title,
   data,
   columns,
+  cardRender,
   searchKeys = [],
   filterBy,
   extraFilters,
@@ -44,6 +46,8 @@ export default function DataTablePro<T>({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todos");
   const [page, setPage] = useState(1);
+
+  const isMobile = useIsMobile(640);
 
   const filtered = useMemo(() => {
     let result = [...data];
@@ -72,7 +76,7 @@ export default function DataTablePro<T>({
   );
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Encabezado */}
       <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
         {title && <h2 className="text-xl font-bold">{title}</h2>}
@@ -85,7 +89,7 @@ export default function DataTablePro<T>({
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md"
+            className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md text-sm"
           />
           {filterBy && (
             <select
@@ -94,7 +98,7 @@ export default function DataTablePro<T>({
                 setFilter(e.target.value);
                 setPage(1);
               }}
-              className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md"
+              className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md text-sm"
             >
               <option value="todos">Todos</option>
               {filterBy.options.map((opt) => (
@@ -108,7 +112,7 @@ export default function DataTablePro<T>({
           {onExportExcel && (
             <button
               onClick={onExportExcel}
-              className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
             >
               Excel
             </button>
@@ -116,7 +120,7 @@ export default function DataTablePro<T>({
           {onExportPdf && (
             <button
               onClick={onExportPdf}
-              className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
             >
               PDF
             </button>
@@ -124,41 +128,68 @@ export default function DataTablePro<T>({
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-white/[0.03]">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((col) => (
-                <TableCell key={String(col.key)} isHeader>
-                  {col.header}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginated.length === 0 ? (
-              <TableRow>
-                <TableCell isHeader={false} className="text-center py-4 text-gray-500" colSpan={columns.length}>
-                  No se encontraron resultados.
-                </TableCell>
+      {/* Tabla o tarjetas */}
+      {isMobile && cardRender ? (
+        <div className="flex flex-col gap-4">
+          {paginated.map((item, i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-gray-200 p-4 shadow-sm bg-white dark:bg-gray-800"
+            >
+              {cardRender(item)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-white/[0.03]">
+          <Table className="min-w-[800px] text-sm">
+            <TableHeader>
+              <TableRow className="bg-gray-50 dark:bg-gray-800">
+                {columns.map((col) => (
+                  <TableCell
+                    key={String(col.key)}
+                    isHeader
+                    className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap"
+                  >
+                    {col.header}
+                  </TableCell>
+                ))}
               </TableRow>
-            ) : (
-              paginated.map((item, i) => (
-                <TableRow key={i}>
-                  {columns.map((col) => (
-                   <TableCell key={String(col.key)}>
-                    {col.render
-                        ? col.render(item)
-                        : String((item as Record<string, unknown>)[col.key] ?? "")}
-                    </TableCell>
-                  ))}
+            </TableHeader>
+            <TableBody>
+              {paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    isHeader={false}
+                    colSpan={columns.length}
+                    className="text-center py-4 text-gray-500"
+                  >
+                    No se encontraron resultados.
+                  </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                paginated.map((item, i) => (
+                  <TableRow
+                    key={i}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  >
+                    {columns.map((col) => (
+                      <TableCell
+                        key={String(col.key)}
+                        className="px-4 py-2 whitespace-nowrap"
+                      >
+                        {col.render
+                          ? col.render(item)
+                          : String((item as Record<string, unknown>)[col.key] ?? "")}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Paginación */}
       {totalPages > 1 && (
@@ -166,7 +197,7 @@ export default function DataTablePro<T>({
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-1 border rounded disabled:opacity-50"
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50"
           >
             Anterior
           </button>
@@ -174,7 +205,7 @@ export default function DataTablePro<T>({
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1 border rounded disabled:opacity-50"
+            className="px-3 py-1 border rounded text-sm disabled:opacity-50"
           >
             Siguiente
           </button>
