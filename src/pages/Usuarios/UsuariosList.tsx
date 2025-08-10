@@ -1,18 +1,31 @@
+// src/pages/usuarios/UsuariosList.tsx
+
 import { useEffect, useState } from "react";
 import { getUsers, toggleUserActive } from "@/services/userService";
 import { User } from "@/types/User";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import UsuariosTable from "@/components/UserProfile/UsuariosTable";
+import { toast } from "react-toastify";
 
 export default function UsuariosList() {
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    getUsers()
-      .then(setUsuarios)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    const fetchUsers = async () => {
+      try {
+        const allUsers = await getUsers();
+        setUsuarios(allUsers);
+      } catch (err) {
+        toast.error("Error al cargar usuarios");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
   }, []);
 
   const handleToggle = async (id: string, current: boolean) => {
@@ -21,9 +34,15 @@ export default function UsuariosList() {
       setUsuarios((prev) =>
         prev.map((u) => (u.id === id ? { ...u, isActive: updated.isActive } : u))
       );
+      toast.success(`Usuario ${updated.isActive ? "activado" : "desactivado"}`);
     } catch (err) {
-      console.error("Error al cambiar estado:", err);
+      toast.error("No se pudo actualizar el estado del usuario");
+      console.error(err);
     }
+  };
+
+  const handleEdit = (id: string) => {
+    navigate(`/administracion/usuarios/editar/${id}`);
   };
 
   return (
@@ -44,7 +63,7 @@ export default function UsuariosList() {
         <UsuariosTable
           usuarios={usuarios}
           onToggle={handleToggle}
-          onEdit={(id) => console.log("Editar", id)}
+          onEdit={handleEdit}
           onDelete={(id) => console.log("Eliminar", id)}
           onReport={(id) => console.log("Reporte", id)}
         />

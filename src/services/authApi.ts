@@ -3,10 +3,10 @@ import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 import { useMenuStore } from "@/store/menuStore";
 import { RefreshResponse } from "@/types/Auth";
-import { navigate } from "@/utils/navigate"; // ✅ redirección global opcional
+import { navigate } from "@/utils/navigate";
 
 const authApi = axios.create({
-  baseURL: import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:4001/auth",
+  baseURL: import.meta.env.VITE_AUTH_SERVICE_URL,
   withCredentials: true,
 });
 
@@ -17,69 +17,84 @@ authApi.interceptors.request.use((config) => {
   config.headers = config.headers || {};
 
   if (csrfToken) {
-    console.log("📤 [authApi] Usando CSRF token:", csrfToken);
+    if (import.meta.env.DEV) console.log("📤 [authApi] Usando CSRF token:", csrfToken);
     config.headers["x-csrf-token"] = csrfToken;
   }
 
   if (accessToken) {
-    console.log("🔐 [authApi] Usando AccessToken en Authorization header");
+    if (import.meta.env.DEV) console.log("🔐 [authApi] Usando AccessToken");
     config.headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   return config;
 });
 
-// ✅ Interceptor RESPONSE: si 401 → reintenta con /refresh-token
+// ✅ Interceptor RESPONSE: si 401 → intenta refresh-token (excepto en /login o /logout)
 authApi.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     const status = error?.response?.status;
 
-    if (status === 401 && !originalRequest._retry) {
+    // Evitar retry si ya lo intentamos, o si es login/logout/refresh mismo
+    const skipRetry =
+      originalRequest._retry ||
+      originalRequest?.headers?.["x-skip-refresh"] === "true" ||
+      originalRequest?.url?.includes("/login") ||
+      originalRequest?.url?.includes("/logout") ||
+      originalRequest?.url?.includes("/refresh-token");
+
+    if (status === 401 && !skipRetry) {
       originalRequest._retry = true;
 
-      console.warn("⚠️ [authApi] Recibido 401. Intentando /refresh-token...");
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ [authApi] 401 recibido. Intentando refresh-token...");
+      }
 
       try {
         const refreshRes = await authApi.post<RefreshResponse>("/refresh-token", null, {
           withCredentials: true,
+          headers: { "x-skip-refresh": "true" }, // 👈 evita loops
         });
 
         const { csrfToken, accessToken } = refreshRes.data;
 
-        console.log("🔁 [authApi] Nuevos tokens obtenidos vía /refresh-token");
-        console.log("🧪 Nuevo CSRF:", csrfToken);
-        console.log("🧪 Nuevo AccessToken:", accessToken);
+        if (import.meta.env.DEV) {
+          console.log("🔁 Nuevos tokens obtenidos:");
+          console.log("   - CSRF:", csrfToken);
+          console.log("   - AccessToken:", accessToken);
+        }
 
+        // Actualizar estado global
         useAuthStore.getState().setCsrfToken(csrfToken);
         useAuthStore.getState().setAccessToken(accessToken);
 
-        // Rehidratar sesión
         await useAuthStore.getState().fetchSession();
 
-        // Actualizar headers del request original
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers["x-csrf-token"] = csrfToken;
-        originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
+        // Reintentar request original con nuevos headers
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          "x-csrf-token": csrfToken,
+          Authorization: `Bearer ${accessToken}`,
+        };
 
-        console.log("🔁 [authApi] Reintentando request original con nuevos tokens...");
         return authApi(originalRequest);
-      } catch (err) {
-        console.error("❌ [authApi] Falló refresh-token. Cerrando sesión...");
+      } catch (refreshError) {
+        console.error("❌ [authApi] Refresh-token falló. Cerrando sesión...");
 
-        // Evita ciclo infinito
-        useAuthStore.getState().clearUser();
+        // Logout silencioso (sin toasts)
+        await useAuthStore.getState().logout(true);
 
-        // Limpiar menú también
         const { clearMenus, setMenuLoaded } = useMenuStore.getState();
         clearMenus();
         setMenuLoaded(false);
 
-        // Redirigir manualmente
-        navigate("/signin");
+        // Redirigir solo si no estamos ya en /signin
+        if (window.location.pathname !== "/signin") {
+          navigate("/signin");
+        }
 
-        return Promise.reject(err);
+        return Promise.reject(refreshError);
       }
     }
 

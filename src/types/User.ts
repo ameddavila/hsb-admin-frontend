@@ -13,6 +13,7 @@ export interface User {
   lastName?: string;
   phone?: string | null;
   profileImage?: string | null;
+  profileImageUrl?: string;
   isActive: boolean; 
   // Usado solo en memoria
   roles?: Role[];

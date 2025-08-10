@@ -1,4 +1,3 @@
-// src/store/authStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import authApi from "@/services/authApi";
@@ -8,6 +7,8 @@ import type { MenuNode } from "@/types/Menu";
 import { useMenuStore } from "./menuStore";
 import { getOrCreateDeviceId } from "@/utils/deviceId";
 import { waitForRotatedCsrf } from "@/utils/waitForCookie";
+import { showError, showSuccess } from "@/utils/toastUtils";
+import { getAxiosErrorMessage } from "@/utils/getAxiosErrorMessage";
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -27,7 +28,7 @@ type AuthState = {
   setAccessToken: (token: string) => void;
 
   login: (identifier: string, password: string) => Promise<boolean>;
-  logout: () => Promise<void>;
+  logout: (silent?: boolean) => Promise<void>;
   fetchSession: () => Promise<void>;
 };
 
@@ -43,47 +44,53 @@ export const useAuthStore = create<AuthState>()(
       menus: [],
 
       setUser: (user) => {
-        console.log("✅ [setUser] Usuario asignado:", user.username);
-        set({
-          user,
-          isAuthenticated: true,
-        });
+        if (import.meta.env.DEV) {
+          console.log("✅ [setUser] Usuario asignado:", user.username);
+        }
+        set({ user, isAuthenticated: true });
       },
 
       setRoles: (roles) => {
-        console.log("✅ [setRoles] Asignando roles:", roles);
+        if (import.meta.env.DEV) {
+          console.log("✅ [setRoles] Asignando roles:", roles);
+        }
         set({ roles });
       },
 
       setPermissions: (permissions) => {
-        console.log("✅ [setPermissions] Asignando permisos:", permissions);
+        if (import.meta.env.DEV) {
+          console.log("✅ [setPermissions] Asignando permisos:", permissions);
+        }
         set({ permissions });
       },
 
       setMenus: (menus) => {
-        console.log("✅ [setMenus] Asignando menús:", menus);
+        if (import.meta.env.DEV) {
+          console.log("✅ [setMenus] Asignando menús:", menus);
+        }
         set({ menus });
       },
 
       setCsrfToken: (token) => {
         if (!token || token === get().csrfToken) return;
-        localStorage.setItem("csrfToken", token);
-        console.log("🔐 [setCsrfToken] Nuevo token:", token);
+        if (import.meta.env.DEV) {
+          console.log("🔐 [setCsrfToken] Nuevo token:", token);
+        }
         set({ csrfToken: token });
       },
 
       setAccessToken: (token) => {
         if (!token || token === get().accessToken) return;
-        localStorage.setItem("accessToken", token);
-        console.log("🔐 [setAccessToken] Nuevo token:", token);
+        if (import.meta.env.DEV) {
+          console.log("🔐 [setAccessToken] Nuevo token:", token);
+        }
         set({ accessToken: token });
       },
 
       clearUser: () => {
-        console.log("🧹 [clearUser] Limpiando estado y localStorage");
-        localStorage.removeItem("csrfToken");
-        localStorage.removeItem("accessToken");
-
+        if (import.meta.env.DEV) {
+          console.log("🧹 [clearUser] Limpiando estado");
+        }
         set({
           isAuthenticated: false,
           user: null,
@@ -97,7 +104,9 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (identifier, password) => {
         try {
-          console.log("📤 [login] Iniciando con:", identifier);
+          if (import.meta.env.DEV) {
+            console.log("📤 [login] Iniciando con:", identifier);
+          }
 
           const res = await authApi.post<AuthResponse>(
             "/login",
@@ -108,28 +117,41 @@ export const useAuthStore = create<AuthState>()(
             },
             {
               withCredentials: true,
+              // 👇 Flag para evitar retry en interceptor
+              headers: { "x-skip-refresh": "true" },
             }
           );
 
           const { csrfToken, accessToken } = res.data;
-
           get().setCsrfToken(csrfToken);
           get().setAccessToken(accessToken);
 
           await get().fetchSession();
 
-          console.log("✅ [login] Autenticación completada");
+          if (import.meta.env.DEV) {
+            console.log("✅ [login] Autenticación completada");
+          }
+
+          showSuccess("Inicio de sesión exitoso");
           return true;
-        } catch (error) {
-          console.error("❌ [login] Error:", error);
+        } catch (error: unknown) {
+          const message = getAxiosErrorMessage(error);
+          console.groupCollapsed("❌ [authStore] Login error");
+          console.log("📩 Identificador:", identifier);
+          console.log("📛 Mensaje:", message);
+          console.groupEnd();
+          showError(message, "auth-login-error"); // 👈 evita toasts duplicados
           return false;
         }
       },
 
-      logout: async () => {
+      logout: async (silent = false) => {
+        const csrfToken = get().csrfToken ?? "";
+
         try {
-          const csrfToken = get().csrfToken ?? localStorage.getItem("csrfToken") ?? "";
-          console.log("📤 [logout] Cerrando sesión...");
+          if (import.meta.env.DEV) {
+            console.log("📤 [logout] Cerrando sesión...");
+          }
 
           await authApi.post(
             "/logout",
@@ -140,9 +162,12 @@ export const useAuthStore = create<AuthState>()(
             }
           );
 
-          console.log("✅ [logout] Éxito");
+          if (!silent) showSuccess("Sesión cerrada");
         } catch (err) {
-          console.error("❌ [logout] Fallo al cerrar sesión:", err);
+          if (!silent) {
+            console.error("❌ [logout] Fallo al cerrar sesión:", err);
+            showError("Error al cerrar sesión", "auth-logout-error");
+          }
         }
 
         get().clearUser();
@@ -152,13 +177,13 @@ export const useAuthStore = create<AuthState>()(
           clearMenus();
           setMenuLoaded(false);
         } catch (err) {
-          console.warn("⚠️ [logout] Error limpiando menús:", err);
+          if (!silent) console.warn("⚠️ [logout] Error limpiando menús:", err);
         }
       },
 
       fetchSession: async () => {
         try {
-          let csrfToken = get().csrfToken ?? localStorage.getItem("csrfToken") ?? "";
+          let csrfToken = get().csrfToken ?? "";
 
           try {
             const rotated = await waitForRotatedCsrf();
@@ -167,7 +192,7 @@ export const useAuthStore = create<AuthState>()(
             console.log("⚠️ [fetchSession] No se pudo rotar CSRF:", err);
           }
 
-          const accessToken = get().accessToken ?? localStorage.getItem("accessToken") ?? "";
+          const accessToken = get().accessToken ?? "";
 
           const res = await authApi.get<AuthResponse>("/me", {
             headers: {
@@ -179,10 +204,12 @@ export const useAuthStore = create<AuthState>()(
 
           const { user, roles, permissions, menus } = res.data;
 
-          console.log("👤 [fetchSession] Usuario:", user);
-          console.log("🔐 [fetchSession] Roles:", roles);
-          console.log("🔑 [fetchSession] Permisos:", permissions);
-          console.log("📋 [fetchSession] Menús:", menus);
+          if (import.meta.env.DEV) {
+            console.log("👤 [fetchSession] Usuario:", user);
+            console.log("🔐 [fetchSession] Roles:", roles);
+            console.log("🔑 [fetchSession] Permisos:", permissions);
+            console.log("📋 [fetchSession] Menús:", menus);
+          }
 
           get().setUser(user);
           get().setRoles(roles || []);
@@ -190,7 +217,7 @@ export const useAuthStore = create<AuthState>()(
           get().setMenus(menus || []);
         } catch (error) {
           console.warn("⚠️ [fetchSession] Sesión inválida:", error);
-          await get().logout();
+          await get().logout(true); // 👈 logout silencioso desde interceptor
         }
       },
     }),
@@ -214,4 +241,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
-  

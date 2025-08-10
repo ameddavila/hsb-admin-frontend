@@ -1,75 +1,103 @@
+// src/services/userApi.ts
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 import { useMenuStore } from "@/store/menuStore";
 import { waitForRotatedCsrf } from "@/utils/waitForCookie";
 import { navigate } from "@/utils/navigate";
-import { RefreshResponse } from "@/types/Auth";
+import type { RefreshResponse } from "@/types/Auth";
 
-// 📦 Instancia Axios para user-service
 const userApi = axios.create({
-  baseURL: import.meta.env.VITE_USER_SERVICE_URL || "http://localhost:4002/api/users",
+  baseURL: import.meta.env.VITE_USER_SERVICE_URL,
   withCredentials: true,
 });
 
-// ✅ Interceptor REQUEST: añade CSRF y AccessToken si están disponibles
+// ✅ Interceptor REQUEST
 userApi.interceptors.request.use((config) => {
   const { csrfToken, accessToken } = useAuthStore.getState();
   config.headers = config.headers || {};
 
   if (csrfToken) {
-    console.log("🧪 [userApi] Usando CSRF token:", csrfToken);
+    if (import.meta.env.DEV) {
+      console.log("📤 [userApi] Usando CSRF token:", csrfToken);
+    }
     config.headers["x-csrf-token"] = csrfToken;
   }
 
   if (accessToken) {
-    console.log("🔐 [userApi] Usando AccessToken en Authorization header");
+    if (import.meta.env.DEV) {
+      console.log("🔐 [userApi] Usando AccessToken");
+    }
     config.headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   return config;
 });
 
-// ✅ Interceptor RESPONSE: intenta refresh si hay 401 una vez
+// ✅ Interceptor RESPONSE: intenta refresh una vez
 userApi.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     const status = error?.response?.status;
 
-    if (status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        console.warn("[userApi] ❗401 detectado. Intentando refresh...");
+    const skipRetry =
+      originalRequest._retry ||
+      originalRequest?.headers?.["x-skip-refresh"] === "true" ||
+      originalRequest?.url?.includes("/login") ||
+      originalRequest?.url?.includes("/logout") ||
+      originalRequest?.url?.includes("/refresh-token");
 
-        const csrfToken = await waitForRotatedCsrf();
+    if (status === 401 && !skipRetry) {
+      originalRequest._retry = true;
+
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ [userApi] 401 detectado. Intentando refresh-token...");
+      }
+
+      try {
+        const rotatedCsrf = await waitForRotatedCsrf();
 
         const refreshRes = await axios.post<RefreshResponse>(
           import.meta.env.VITE_AUTH_SERVICE_URL + "/refresh-token",
           null,
           {
-            headers: { "x-csrf-token": csrfToken },
+            headers: {
+              "x-csrf-token": rotatedCsrf,
+              "x-skip-refresh": "true",
+            },
             withCredentials: true,
           }
         );
 
-        const newCsrf = refreshRes.data?.csrfToken;
-        useAuthStore.getState().setCsrfToken(newCsrf);
+        const { csrfToken, accessToken } = refreshRes.data;
 
+        useAuthStore.getState().setCsrfToken(csrfToken);
+        useAuthStore.getState().setAccessToken(accessToken);
         await useAuthStore.getState().fetchSession();
 
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers["x-csrf-token"] = newCsrf;
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          "x-csrf-token": csrfToken,
+          Authorization: `Bearer ${accessToken}`,
+        };
+
+        if (import.meta.env.DEV) {
+          console.log("🔁 [userApi] Reintentando request original...");
+        }
 
         return userApi(originalRequest);
       } catch (err) {
-        console.error("❌ Falló el refresh desde userApi:", err);
+        console.error("❌ [userApi] Falló refresh-token. Cerrando sesión...");
 
         useAuthStore.getState().clearUser();
         const { clearMenus, setMenuLoaded } = useMenuStore.getState();
         clearMenus();
         setMenuLoaded(false);
 
-        navigate("/signin");
+        if (window.location.pathname !== "/signin") {
+          navigate("/signin");
+        }
+
         return Promise.reject(err);
       }
     }

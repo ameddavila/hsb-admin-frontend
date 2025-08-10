@@ -7,6 +7,7 @@ import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
 import { useAuthStore } from "../../store/authStore";
+import { showError } from "@/utils/toastUtils"; // ✅ Importar
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +28,7 @@ export default function SignInForm() {
     if (success) {
       navigate("/");
     } else {
-      alert("Credenciales inválidas");
+      showError("Credenciales inválidas");
     }
 
     setLoading(false);

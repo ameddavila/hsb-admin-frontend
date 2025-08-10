@@ -1,3 +1,4 @@
+// src/services/userService.ts
 import userApi from "./userApi";
 import type { User } from "@/types/User";
 import type { AxiosErrorResponse } from "@/types/AxiosError";
@@ -17,15 +18,30 @@ export const getUsers = async (): Promise<User[]> => {
 };
 
 /**
- * 🔍 Obtener un usuario por ID
+ * 🔍 Obtener un usuario por ID (✅ Incluye CSRF + Auth headers)
  */
 export const getUserById = async (id: string): Promise<User> => {
   console.log(`📡 [userService] GET /users/${id}`);
 
-  const res = await userApi.get<{ user: User }>(`/users/${id}`);
+  try {
+    const csrfToken = await waitForRotatedCsrf();
+    const { accessToken } = useAuthStore.getState();
 
-  console.log("📦 Usuario recibido:", res.data.user.username);
-  return res.data.user;
+    const res = await userApi.get<{ user: User }>(`/users/${id}`, {
+      headers: {
+        "x-csrf-token": csrfToken,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      withCredentials: true,
+    });
+
+    console.log("📦 Usuario recibido:", res.data.user.username);
+    return res.data.user;
+  } catch (error) {
+    const err = error as AxiosErrorResponse;
+    console.error("❌ [userService] Error al obtener usuario:", err.response?.data || err.message);
+    throw error;
+  }
 };
 
 /**
@@ -59,10 +75,7 @@ export const createUser = async (formData: FormData): Promise<User> => {
 /**
  * ✏️ Actualizar un usuario (formData)
  */
-export const updateUser = async (
-  id: string,
-  formData: FormData
-): Promise<User> => {
+export const updateUser = async (id: string, formData: FormData): Promise<User> => {
   console.log(`📤 [userService] PUT /users/${id}`);
 
   try {
@@ -90,10 +103,7 @@ export const updateUser = async (
 /**
  * 🔄 Activar o desactivar usuario
  */
-export const toggleUserActive = async (
-  id: string,
-  isActive: boolean
-): Promise<User> => {
+export const toggleUserActive = async (id: string, isActive: boolean): Promise<User> => {
   console.log(`📤 [userService] PATCH /users/${id}/status`, { isActive });
 
   try {
